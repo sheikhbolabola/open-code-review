@@ -222,7 +222,7 @@ function makeFixture() {
 const fs = require("fs");
 const args = process.argv.slice(2);
 const env = {};
-for (const name of ["OCR_LLM_TIMEOUT", "OCR_LLM_EXTRA_HEADERS", "REVIEW_TASK_TIMEOUT", "OCR_TIMEOUT"]) {
+for (const name of ["OCR_LLM_TIMEOUT", "OCR_LLM_EXTRA_HEADERS", "REVIEW_TASK_TIMEOUT", "OCR_TIMEOUT", "OCR_NO_UPDATE"]) {
   if (process.env[name] !== undefined) env[name] = process.env[name];
 }
 const record = { args, env };
@@ -1010,6 +1010,50 @@ function testValidateInputsValidatesStreamProgress() {
   }
 }
 
+function testValidateInputsValidatesResolveOutdated() {
+  const validation = validationStep();
+  assert.ok(validation, "action.yml must retain input validation");
+  for (const value of ["yes", "1", "on", "resolve"]) {
+    const fixture = makeFixture();
+    try {
+      const result = runStep(validation, inputValues({ resolve_outdated: value }), fixture);
+      assert.notStrictEqual(
+        result.status,
+        0,
+        `resolve_outdated=${JSON.stringify(value)} should be rejected; ${resultDescription(result)}`
+      );
+      assert.match(
+        `${result.stdout}\n${result.stderr}`,
+        /resolve_outdated must be one of/,
+        `rejection for resolve_outdated=${JSON.stringify(value)} must name the input; ${resultDescription(result)}`
+      );
+    } finally {
+      removeFixture(fixture);
+    }
+  }
+  const acceptance = [
+    ["TRUE", "true"],
+    ["Report", "report"],
+    ["", "false"],
+    ["false", "false"],
+  ];
+  for (const [value, expected] of acceptance) {
+    const fixture = makeFixture();
+    try {
+      const result = runStep(validation, inputValues({ resolve_outdated: value }), fixture);
+      assert.strictEqual(result.status, 0, `resolve_outdated=${JSON.stringify(value)} should be accepted; ${resultDescription(result)}`);
+      const exported = readEnvAssignments(path.join(fixture.dir, "github-env"));
+      assert.strictEqual(
+        exported.RESOLVE_OUTDATED,
+        expected,
+        `validation must export ${JSON.stringify(expected)} for resolve_outdated=${JSON.stringify(value)}`
+      );
+    } finally {
+      removeFixture(fixture);
+    }
+  }
+}
+
 function testRunKeepsAgentAudienceAndLogFileByDefault() {
   const run = stepNamed("Run OpenCodeReview");
   assert.ok(run, "action.yml must retain the Run OpenCodeReview step");
@@ -1341,6 +1385,112 @@ function testConfigureProtocolTracksUseAnthropic() {
     } finally {
       removeFixture(fixture);
     }
+  }
+}
+
+function testConfigureHonoursExplicitProtocol() {
+  const configure = stepNamed("Configure OCR");
+  assert.ok(configure, "action.yml must retain the Configure OCR step");
+  const base = {
+    llm_url: "https://llm.example.invalid/v1",
+    llm_model: "contract-model",
+    llm_auth_token: "protocol-token-sentinel",
+  };
+  // The explicit protocol wins, and use_anthropic follows it — the boolean
+  // alone is what forced every Responses API user onto chat/completions.
+  const cases = [
+    { input: "openai-responses", useAnthropic: "false", expectAnthropic: "false", expectProtocol: "openai-responses" },
+    { input: "openai-responses", useAnthropic: "true", expectAnthropic: "false", expectProtocol: "openai-responses" },
+    { input: "Anthropic", useAnthropic: "false", expectAnthropic: "true", expectProtocol: "anthropic" },
+    { input: "openai", useAnthropic: "true", expectAnthropic: "false", expectProtocol: "openai" },
+  ];
+  for (const testCase of cases) {
+    const fixture = makeFixture();
+    try {
+      const values = inputValues(Object.assign({}, base, {
+        llm_use_anthropic: testCase.useAnthropic,
+        llm_protocol: testCase.input,
+      }));
+      const result = runStep(configure, values, fixture);
+      assert.strictEqual(
+        result.status,
+        0,
+        `Configure OCR failed for llm_protocol=${testCase.input}; ${resultDescription(result)}`
+      );
+      const configured = configValues(configOperations(fixture));
+      assert.strictEqual(configured["llm.protocol"], testCase.expectProtocol);
+      assert.strictEqual(configured["llm.use_anthropic"], testCase.expectAnthropic);
+      assert.strictEqual(
+        readEnvAssignments(path.join(fixture.dir, "github-env")).OCR_LLM_PROTOCOL_EXPLICIT,
+        testCase.expectProtocol,
+        "the normalized explicit protocol must be exported for the checkpoint fingerprint"
+      );
+    } finally {
+      removeFixture(fixture);
+    }
+  }
+
+  // OCR_LLM_PROTOCOL from the job environment is honoured when the input is
+  // empty: it is the variable the CLI itself reads, and the one the report
+  // set without effect.
+  const inherited = makeFixture();
+  try {
+    const values = inputValues(Object.assign({}, base, { llm_use_anthropic: "false" }));
+    const result = runStep(configure, values, inherited, { OCR_LLM_PROTOCOL: "openai-responses" });
+    assert.strictEqual(result.status, 0, `Configure OCR failed with inherited OCR_LLM_PROTOCOL; ${resultDescription(result)}`);
+    const configured = configValues(configOperations(inherited));
+    assert.strictEqual(configured["llm.protocol"], "openai-responses");
+    assert.strictEqual(configured["llm.use_anthropic"], "false");
+    assert.strictEqual(
+      readEnvAssignments(path.join(inherited.dir, "github-env")).OCR_LLM_PROTOCOL_EXPLICIT,
+      "openai-responses",
+      "a protocol switched through the environment alone must reach the checkpoint fingerprint"
+    );
+  } finally {
+    removeFixture(inherited);
+  }
+
+  // With neither source set the export is empty, so the fingerprint stays
+  // exactly what it was before the input existed.
+  const neither = makeFixture();
+  try {
+    const values = inputValues(Object.assign({}, base, { llm_use_anthropic: "false" }));
+    const result = runStep(configure, values, neither);
+    assert.strictEqual(result.status, 0, `Configure OCR failed without a protocol source; ${resultDescription(result)}`);
+    assert.strictEqual(readEnvAssignments(path.join(neither.dir, "github-env")).OCR_LLM_PROTOCOL_EXPLICIT, "");
+  } finally {
+    removeFixture(neither);
+  }
+
+  // The resolve step fingerprints that export, not the raw input.
+  const resolve = STEPS.find((step) => step.name === "Resolve review range");
+  assert.ok(resolve, "action.yml must retain the Resolve review range step");
+  assert.strictEqual(
+    resolve.env.OCR_FP_LLM_PROTOCOL,
+    "${{ env.OCR_LLM_PROTOCOL_EXPLICIT }}",
+    "the checkpoint fingerprint must read the protocol Configure OCR resolved"
+  );
+
+  // The input outranks the inherited variable.
+  const both = makeFixture();
+  try {
+    const values = inputValues(Object.assign({}, base, { llm_use_anthropic: "false", llm_protocol: "anthropic" }));
+    const result = runStep(configure, values, both, { OCR_LLM_PROTOCOL: "openai-responses" });
+    assert.strictEqual(result.status, 0, `Configure OCR failed with both protocol sources; ${resultDescription(result)}`);
+    assert.strictEqual(configValues(configOperations(both))["llm.protocol"], "anthropic");
+  } finally {
+    removeFixture(both);
+  }
+
+  // An unknown protocol fails the step rather than silently configuring one.
+  const unknown = makeFixture();
+  try {
+    const values = inputValues(Object.assign({}, base, { llm_use_anthropic: "false", llm_protocol: "grpc" }));
+    const result = runStep(configure, values, unknown);
+    assert.notStrictEqual(result.status, 0, "an unknown llm_protocol must fail the Configure OCR step");
+    assert.match(`${result.stdout}${result.stderr}`, /llm_protocol must be/, "the failure must name the accepted protocols");
+  } finally {
+    removeFixture(unknown);
   }
 }
 
@@ -1757,6 +1907,104 @@ function testRequiredStepTopologyAndEnvironmentContracts() {
   }
 }
 
+// Returns the composite steps whose shell block invokes the `ocr` CLI.
+// Full-line shell comments are dropped first: they mention `ocr` in prose
+// (the Validate inputs step documents an `ocr review` flag), and a comment
+// is not an invocation. `ocr` must also sit in a command position — start of
+// line or after a shell separator — so quoted strings such as the
+// "ocr review exited with code ..." echo never count. The sweep stays
+// fail-closed: a future step that invokes `ocr` without disabling the
+// self-updater breaks this contract without any step-name list to maintain.
+function ocrInvokingSteps() {
+  return STEPS.filter((step) => {
+    if (typeof step.run !== "string") return false;
+    const code = step.run
+      .split(/\r?\n/)
+      .filter((line) => !/^\s*#/.test(line))
+      .join("\n");
+    return /(?:^|[\s;&|(`])ocr\s+\S/.test(code);
+  });
+}
+
+function testActionOcrInvocationsDisableSelfUpdate() {
+  const invokers = ocrInvokingSteps();
+  const names = invokers.map((step) => step.name);
+  for (const expected of ["Install OpenCodeReview", "Configure OCR", "Run OpenCodeReview"]) {
+    assert.ok(
+      names.includes(expected),
+      `${expected} must be detected as an ocr-invoking step; detection must keep up with action.yml`
+    );
+  }
+  const values = inputValues({
+    llm_url: "https://llm.example.invalid/v1",
+    llm_auth_token: "unused-token",
+    llm_model: "contract-model",
+    llm_use_anthropic: "false",
+  });
+  for (const step of invokers) {
+    assert.strictEqual(
+      renderedEnv(step, values).OCR_NO_UPDATE,
+      "1",
+      `step ${step.name} invokes ocr and must disable CLI self-update (env OCR_NO_UPDATE: "1")`
+    );
+  }
+
+  // The same contract observed through the executed shell blocks: the first
+  // `ocr version` in the Install step is what spawns the detached updater,
+  // so every recorded invocation — version, config, review — must observe
+  // OCR_NO_UPDATE=1, not just the later steps.
+  const fixture = makeFixture();
+  try {
+    const install = runStep(
+      installStep(),
+      inputValues({ ocr_version: "1.9.10" }),
+      fixture,
+      { OCR_FAKE_VERSION_OUTPUT: "open-code-review 1.9.10 linux/amd64" }
+    );
+    assert.strictEqual(
+      install.status,
+      0,
+      `Install OpenCodeReview shell block failed; ${resultDescription(install)}`
+    );
+    const configure = runStep(stepNamed("Configure OCR"), values, fixture, {
+      OCR_LLM_TOKEN: values.llm_auth_token,
+    });
+    assert.strictEqual(
+      configure.status,
+      0,
+      `Configure OCR shell block failed; ${resultDescription(configure)}`
+    );
+    const run = runStep(
+      stepNamed("Run OpenCodeReview"),
+      values,
+      fixture,
+      { MERGE_BASE: "base-sha", HEAD_SHA: "head-sha", REVIEW_TASK_TIMEOUT: "15" },
+      { replaceResultPaths: true }
+    );
+    assert.strictEqual(
+      run.status,
+      0,
+      `Run OpenCodeReview shell block failed; ${resultDescription(run)}`
+    );
+    const calls = readJsonLines(fixture.callsPath);
+    for (const subcommand of ["version", "config", "review"]) {
+      assert.ok(
+        calls.some((call) => call.args[0] === subcommand),
+        `the executed steps must exercise \`ocr ${subcommand}\``
+      );
+    }
+    for (const call of calls) {
+      assert.strictEqual(
+        call.env.OCR_NO_UPDATE,
+        "1",
+        `every action-owned ocr invocation must observe OCR_NO_UPDATE=1; \`ocr ${call.args.join(" ")}\` saw ${JSON.stringify(call.env.OCR_NO_UPDATE)}`
+      );
+    }
+  } finally {
+    removeFixture(fixture);
+  }
+}
+
 function testContractsRunInDedicatedWorkflow() {
   assert.match(
     CONTRACT_WORKFLOW_TEXT,
@@ -1824,6 +2072,7 @@ const TESTS = [
   ["llm_reasoning_effort rejects values outside the OpenAI/GLM vocabulary", testValidateInputsRejectsInvalidReasoningEffort],
   ["stream_progress defaults to false and describes [ocr] progress", testStreamProgressInputDefaultsToFalse],
   ["stream_progress validation accepts true/false case-insensitively", testValidateInputsValidatesStreamProgress],
+  ["resolve_outdated validation fails fast on an unknown value", testValidateInputsValidatesResolveOutdated],
   ["Run OpenCodeReview keeps --audience agent and the log file by default", testRunKeepsAgentAudienceAndLogFileByDefault],
   ["Run OpenCodeReview streams live progress when opted in", testRunStreamsProgressWhenOptedIn],
   ["llm_extra_body defaults to disabling thinking", testLlmExtraBodyDefaultDisablesThinking],
@@ -1835,6 +2084,7 @@ const TESTS = [
   ["Configure OCR never persists the token", testConfigureNeverPersistsToken],
   ["Configure OCR neutralizes stale provider and static token", testConfigureNeutralizesStaleProviderAndStaticToken],
   ["Configure OCR sets a protocol consistent with use_anthropic", testConfigureProtocolTracksUseAnthropic],
+  ["Configure OCR honours an explicit llm_protocol", testConfigureHonoursExplicitProtocol],
   ["Configure OCR preserves legacy use_anthropic resolution", testConfigurePreservesLegacyUseAnthropicResolution],
   ["Configure OCR clears stale persisted extra headers", testConfigureClearsStaleExtraHeadersBeforeTokenCommand],
   ["Configure OCR clears stale persisted retry codes", testConfigureClearsStaleRetryCodesBeforeEndpointConfig],
@@ -1846,6 +2096,7 @@ const TESTS = [
   ["Install OpenCodeReview rejects stream_progress below v1.9.8", testInstallRejectsStreamProgressBelowV198],
   ["contract harness fails closed on unsupported YAML shapes", testContractHarnessFailsClosedOnUnsupportedYamlShapes],
   ["required action steps and env contracts are present", testRequiredStepTopologyAndEnvironmentContracts],
+  ["every action-owned ocr invocation disables CLI self-update", testActionOcrInvocationsDisableSelfUpdate],
   ["GitHub Actions contracts run in a dedicated workflow", testContractsRunInDedicatedWorkflow],
   ["GitHub Actions README documents timeout and version contracts", testExampleReadmeDocumentsTimeoutAndVersionContracts],
   ["pr_number is an optional, documented input", testPrNumberInputIsOptionalAndDocumented],
