@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -29,6 +30,9 @@ func TestWorkspaceTrackedGitignoreChangeMatrix(t *testing.T) {
 	for _, pattern := range patterns {
 		for _, state := range []string{"unstaged", "staged", "mixed", "deleted"} {
 			t.Run(pattern.name+"/"+state, func(t *testing.T) {
+				if runtime.GOOS == "windows" && strings.ContainsRune(pattern.tracked, '\t') {
+					t.Skip("Windows does not allow tab characters in filenames")
+				}
 				repo := t.TempDir()
 				runGitTest(t, repo, "init", "-q")
 				runGitTest(t, repo, "config", "user.email", "test@example.com")

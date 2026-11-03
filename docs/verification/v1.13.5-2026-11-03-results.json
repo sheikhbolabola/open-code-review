@@ -54,7 +54,9 @@
     "pre_fix_sha": "76ab46ac20f08a8bd8ac38881a8a826c7cb6495f",
     "expected_baseline_failures": 16,
     "release_passes": 16,
-    "actual_cli_preview_passes": 16
+    "actual_cli_preview_passes": 16,
+    "windows_legal_cases": 12,
+    "windows_illegal_filename_skips": 4
   },
   "other_tests": {
     "frontend": {
@@ -142,5 +144,11 @@
       "elapsed_seconds": 48.7,
       "stderr": ""
     }
-  ]
+  ],
+  "github_ci_at_publication": {
+    "windows_native": "in_progress",
+    "codeql": "in_progress",
+    "self_hosted_jobs": "queued",
+    "completion_claimed": false
+  }
 }
