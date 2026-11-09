@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   check:
-    runs-on: self-hosted
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
       run:
@@ -41,10 +41,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-        # No actions/cache for Gradle: this job runs on the self-hosted host
-        # (no container), so ~/.gradle already persists between runs — the IDE
-        # distribution is downloaded once and reused. Uploading a multi-GB
-        # cache archive after every run only risks stalling the job.
+        # The hosted runner starts with a fresh Gradle cache.
 
       - name: Test
         run: ./gradlew test -PskipFrontend=true
