@@ -15,12 +15,12 @@ concurrency:
 
 jobs:
   check:
-    runs-on: self-hosted
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     container:
-      image: node:24.18.0
+      image: node:24.22.1
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Trust workspace
         run: git config --global --replace-all safe.directory '*'

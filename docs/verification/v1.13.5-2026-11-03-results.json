@@ -1,0 +1,154 @@
+{
+  "date": "2026-11-03",
+  "repository": "sheikhbolabola/open-code-review",
+  "base_sha": "e556dfad56f11afe15cce9b1a0ca7f8993a65134",
+  "release_tag": "v1.13.5",
+  "release_sha": "abb7abcd5c5196fa0278dc87db85780fa269562f",
+  "upstream_commits": 122,
+  "branch": "upgrade/opencodereview-v1.13.5-20261103",
+  "environment": {
+    "os": "linux/amd64",
+    "go": "1.26.10",
+    "node": "24.22.1",
+    "npm": "11.9.0",
+    "yarn": "1.22.22",
+    "python": "3.12.14",
+    "test_trace_sampler": "always_on"
+  },
+  "go_tests": {
+    "root": {
+      "pass": 2623,
+      "fail": 0,
+      "skip": [
+        "TestInterruptChildHarness (0.00s)",
+        "TestCloseAll_MixedFleetRealisticProfile (0.00s)",
+        "TestCloseAll_SlowCooperativeServerIsWaitedFor (0.00s)",
+        "TestWithinBase_CaseInsensitiveVariant (0.00s)",
+        "TestProvider_Enumerate_SniffError (0.00s)",
+        "TestProvider_Enumerate_WindowsBackslashSelector (0.00s)",
+        "TestProvider_Enumerate_CaseVariantSelectorResolvesOnCaseInsensitiveFS (0.01s)",
+        "TestFindSessionsByID_ReportsAStatFailureRatherThanSkippingIt (0.00s)",
+        "TestHandleRepos_PermissionDenied (0.00s)",
+        "TestDiscoverRepos_SkipsUnreadableSubdir (0.00s)",
+        "TestListSessions_SkipsUnreadableFiles (0.00s)"
+      ],
+      "packages": 25
+    },
+    "acp": {
+      "pass": 226,
+      "fail": 0,
+      "skip": [
+        "TestRealOCRBinaryScanMultiplePaths (0.00s)",
+        "TestRealEndpointToolCall (0.00s)",
+        "TestRealLatestCommitIntent (0.00s)",
+        "TestResolveBinaryWindowsExeSuffix (0.00s)"
+      ],
+      "packages": 11
+    }
+  },
+  "coverage_percent": {
+    "root": 91.4,
+    "acp": 91.6
+  },
+  "gitignore_regression": {
+    "pre_fix_sha": "76ab46ac20f08a8bd8ac38881a8a826c7cb6495f",
+    "expected_baseline_failures": 16,
+    "release_passes": 16,
+    "actual_cli_preview_passes": 16,
+    "windows_legal_cases": 12,
+    "windows_illegal_filename_skips": 4
+  },
+  "other_tests": {
+    "frontend": {
+      "pass": 62,
+      "suites": 2
+    },
+    "vscode": {
+      "pass": 99,
+      "suites": 11
+    },
+    "opencode_plugin": {
+      "pass": 36,
+      "skip": 1
+    },
+    "python_ci_adapters": {
+      "pass": 256
+    },
+    "cli_version_help": {
+      "pass": 7
+    },
+    "acp_real_cli_scan": "PASS",
+    "acp_official_python_client": "PASS"
+  },
+  "dependency_audit": {
+    "go_symbol_level": "PASS",
+    "root_module_advisories_not_imported": [
+      "GO-2026-6866",
+      "GO-2026-6860"
+    ],
+    "acp": "PASS",
+    "frontend_production": {
+      "status": "PASS",
+      "total": 0
+    },
+    "frontend_including_dev": {
+      "status": "FAIL",
+      "low": 3,
+      "moderate": 18,
+      "high": 0,
+      "critical": 0
+    }
+  },
+  "configuration": {
+    "project_rule_blob_before": "843674bc9af9bfc3116ea96ad3ea537c238d5755",
+    "project_rule_blob_after": "843674bc9af9bfc3116ea96ad3ea537c238d5755",
+    "fork_specific_commits": 0,
+    "personal_machine_configuration": "not available; not modified",
+    "upstream_removed_environment_variable": "OCR_CONFIG_PATH"
+  },
+  "blocked": [
+    "Live LLM review: no configured endpoint or credentials",
+    "Non-root permission regressions: runuser cannot set groups (Operation not permitted)",
+    "Native macOS/Windows execution: Linux host",
+    "IntelliJ JVM 21 / IDE tests: only JDK 17 and no IDE installed",
+    "Optional VS Code keytar native build failed; IDE credential store not tested"
+  ],
+  "cross_compile": [
+    {
+      "platform": "darwin/arm64",
+      "exit_code": 0,
+      "elapsed_seconds": 46.7,
+      "stderr": ""
+    },
+    {
+      "platform": "windows/amd64",
+      "exit_code": 0,
+      "elapsed_seconds": 65.0,
+      "stderr": ""
+    },
+    {
+      "platform": "linux/arm64",
+      "exit_code": 0,
+      "elapsed_seconds": 41.7,
+      "stderr": ""
+    },
+    {
+      "platform": "darwin/amd64",
+      "exit_code": 0,
+      "elapsed_seconds": 45.2,
+      "stderr": ""
+    },
+    {
+      "platform": "windows/arm64",
+      "exit_code": 0,
+      "elapsed_seconds": 48.7,
+      "stderr": ""
+    }
+  ],
+  "github_ci_at_publication": {
+    "windows_native": "in_progress",
+    "codeql": "in_progress",
+    "self_hosted_jobs": "queued",
+    "completion_claimed": false
+  }
+}
