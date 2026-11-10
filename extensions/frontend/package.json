@@ -22,5 +22,8 @@
   },
   "dependencies": {
     "preact": "^10.29.8"
+  },
+  "overrides": {
+    "glob@^10.5.0": "14.0.4"
   }
 }
